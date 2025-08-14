@@ -1,22 +1,42 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { toast } from '@/hooks/use-toast';
 import { Copy, Link, ExternalLink, TrendingUp } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ShortenedURL {
   id: string;
-  originalUrl: string;
-  shortCode: string;
+  original_url: string;
+  short_code: string;
   clicks: number;
-  createdAt: string;
+  created_at: string;
 }
 
 const URLShortener = () => {
   const [url, setUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [shortenedUrls, setShortenedUrls] = useState<ShortenedURL[]>([]);
+
+  // Load existing URLs on component mount
+  useEffect(() => {
+    loadUrls();
+  }, []);
+
+  const loadUrls = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('urls')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setShortenedUrls(data || []);
+    } catch (error) {
+      console.error('Error loading URLs:', error);
+    }
+  };
 
   // Validate URL
   const isValidUrl = (string: string) => {
@@ -61,17 +81,20 @@ const URLShortener = () => {
     setIsLoading(true);
 
     try {
-      // For now, we'll store in memory - will integrate Supabase next
-      const shortCode = generateShortCode();
-      const newShortenedUrl: ShortenedURL = {
-        id: Date.now().toString(),
-        originalUrl: url,
-        shortCode,
-        clicks: 0,
-        createdAt: new Date().toISOString(),
-      };
+      const short_code = generateShortCode();
+      
+      const { data, error } = await supabase
+        .from('urls')
+        .insert({
+          original_url: url,
+          short_code: short_code,
+        })
+        .select()
+        .single();
 
-      setShortenedUrls(prev => [newShortenedUrl, ...prev]);
+      if (error) throw error;
+
+      setShortenedUrls(prev => [data, ...prev]);
       setUrl('');
 
       toast({
@@ -182,7 +205,7 @@ const URLShortener = () => {
             
             <div className="space-y-4">
               {shortenedUrls.map((item) => {
-                const shortUrl = `${window.location.origin}/${item.shortCode}`;
+                const shortUrl = `${window.location.origin}/${item.short_code}`;
                 
                 return (
                   <Card key={item.id} className="p-6 bg-white/95 backdrop-blur-sm shadow-medium border-0">
@@ -192,8 +215,8 @@ const URLShortener = () => {
                           <ExternalLink className="w-4 h-4 text-muted-foreground" />
                           <span className="text-sm text-muted-foreground">Original URL</span>
                         </div>
-                        <p className="text-foreground truncate mb-3" title={item.originalUrl}>
-                          {item.originalUrl}
+                        <p className="text-foreground truncate mb-3" title={item.original_url}>
+                          {item.original_url}
                         </p>
                         
                         <div className="flex items-center gap-2 mb-2">
